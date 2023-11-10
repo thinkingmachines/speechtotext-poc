@@ -1,65 +1,115 @@
-import evaluate
-from pythainlp.tokenize import word_tokenize
+import deepcut
+import jiwer
+
+from normalizers import EnglishTextNormalizer
 
 
-def evaluate_wer_thai(prediction_text: str, reference_text: str):
-    # Create word list using pythainlp word_tokenize
-    predictions = word_tokenize(
-        prediction_text, engine="newmm", keep_whitespace=False, join_broken_num=True
-    )
-    references = word_tokenize(
-        reference_text, engine="newmm", keep_whitespace=False, join_broken_num=True
-    )
+def isd(preds: list[str], actuals: list[str], debug=False) -> int:
+    dp = [[0 for _ in range(len(preds) + 1)] for _ in range(len(actuals) + 1)]
 
-    # Evaluate word list
-    wer = evaluate.load("wer")
-    wer_score = wer.compute(predictions=predictions, references=references)
-    return wer_score
+    for row in range(len(dp)):
+        for col in range(len(dp[0])):
+            if row == 0 or col == 0:
+                dp[row][col] = max(row, col)
+                continue
 
+            if preds[col - 1] != actuals[row - 1]:
+                dp[row][col] = (
+                    min(dp[row - 1][col], dp[row][col - 1], dp[row - 1][col - 1]) + 1
+                )
+            else:
+                dp[row][col] = min(
+                    dp[row - 1][col], dp[row][col - 1], dp[row - 1][col - 1]
+                )
 
-def evaluate_cer_thai(prediction_text: str, reference_text: str):
-    # Create word list using pythainlp word_tokenize
-    predictions = word_tokenize(
-        prediction_text, engine="newmm", keep_whitespace=False, join_broken_num=True
-    )
-    references = word_tokenize(
-        reference_text, engine="newmm", keep_whitespace=False, join_broken_num=True
-    )
+    if debug:
+        print(*dp, sep="\n")
 
-    # Evaluate word list
-    cer = evaluate.load("cer")
-    cer_score = cer.compute(predictions=predictions, references=references)
-    return cer_score
+    return dp[-1][-1]
 
 
-def evaluate_wer_eng(prediction_text: str, reference_text: str):
-    # Create word list for english text
-    predictions = prediction_text.split(" ")
-    references = reference_text.split(" ")
-
-    # Evaluate word list
-    wer = evaluate.load("wer")
-    wer_score = wer.compute(predictions=predictions, references=references)
-    return wer_score
+def wer_th(pred: str, actual: str, **kwargs) -> float:
+    preds = deepcut.tokenize(pred)
+    actuals = deepcut.tokenize(actual)
+    err = isd(preds, actuals, **kwargs)
+    return err / len(actuals)
 
 
-def evaluate_cer_eng(prediction_text: str, reference_text: str):
-    # Create word list for english text
-    predictions = prediction_text.split(" ")
-    references = reference_text.split(" ")
+def wer_eng(pred: str, actual: str, **kwargs) -> float:
+    # Normalize text before calculate
+    normalizer = EnglishTextNormalizer()
+    pred = normalizer(pred)
+    actual = normalizer(actual)
 
-    # Evaluate word list
-    cer = evaluate.load("cer")
-    cer_score = cer.compute(predictions=predictions, references=references)
-    return cer_score
+    # Split sentence to word
+    preds = pred.split(" ")
+    actuals = actual.split(" ")
+
+    # Calculte wer
+    err = isd(preds, actuals, **kwargs)
+    return err / len(actuals)
+
+
+def cer_th(pred: str, actual: str):
+    return jiwer.cer(hypothesis=pred, reference=actual)
+
+
+def cer_eng(pred: str, actual: str):
+    # Normalize text before calculate
+    normalizer = EnglishTextNormalizer()
+    pred = normalizer(pred)
+    actual = normalizer(actual)
+    return jiwer.cer(hypothesis=pred, reference=actual)
 
 
 if __name__ == "__main__":
-    # Input
-    prediction_text = "กินข้าว"
-    reference_text = "กินน้ำ"
-    wer_score = evaluate_wer_thai(prediction_text, reference_text)
-    cer_score = evaluate_cer_thai(prediction_text, reference_text)
+    # Input eng
+    with open(
+        "data/result/whisper/large-v1/en_Digital_Roadshow_Q1_2023_NVD/[EN] Digital Roadshow Q1_2023 NVD _ NIRVANA DEVELOPMENT PUBLIC COMPANY LIMITED.txt",
+        "r",
+    ) as f:
+        prediction_text = f.read()
+    with open(
+        "data/sample_output/Transcription Digital Roadshow Nirvana.txt",
+        "r",
+    ) as f:
+        reference_text = f.read()
+    wer_score = wer_eng(prediction_text, reference_text)
+    cer_score = cer_eng(prediction_text, reference_text)
+
+    print(f"WER: {wer_score}")
+    print(f"CER: {cer_score}")
+
+    # Input th
+    with open(
+        "data/result/whisper/large-v1/th_Oppday_Q2_2023_IP_interfama/[TH] Oppday Q2_2023 IP บมจ. อินเตอร์ ฟาร์มา.txt",
+        "r",
+    ) as f:
+        prediction_text = f.read()
+    with open(
+        "data/sample_output/Transcript Oppday Inter Pharma.txt",
+        "r",
+    ) as f:
+        reference_text = f.read()
+    wer_score = wer_th(prediction_text, reference_text)
+    cer_score = cer_th(prediction_text, reference_text)
+
+    print(f"WER: {wer_score}")
+    print(f"CER: {cer_score}")
+
+    # Input eng
+    with open(
+        "data/result/whisper/large-v1/en-th_Oppday_Q2_2023_CCET/[EN_TH] Oppday Q2_2023 CCET บมจ. แคล-คอมพ์ อีเล็คโทรนิคส์ (ประเทศไทย).txt",
+        "r",
+    ) as f:
+        prediction_text = f.read()
+    with open(
+        "data/sample_output/Transcript  Oppday CCET.txt",
+        "r",
+    ) as f:
+        reference_text = f.read()
+    wer_score = wer_eng(prediction_text, reference_text)
+    cer_score = cer_eng(prediction_text, reference_text)
 
     print(f"WER: {wer_score}")
     print(f"CER: {cer_score}")
