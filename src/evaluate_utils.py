@@ -1,7 +1,7 @@
 import deepcut
 import jiwer
 
-from normalizers import EnglishTextNormalizer
+from src.normalizers import EnglishTextNormalizer
 
 
 def isd(preds: list[str], actuals: list[str], debug=False) -> int:
