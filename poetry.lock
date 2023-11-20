@@ -1956,6 +1956,48 @@ files = [
 ]
 
 [[package]]
+name = "pythainlp"
+version = "4.0.2"
+description = "Thai Natural Language Processing library"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "pythainlp-4.0.2-py3-none-any.whl", hash = "sha256:677922cd4965ec5fc2a6f2e309a2b9d472092ec632f997995548da44cb05b3b4"},
+    {file = "pythainlp-4.0.2.tar.gz", hash = "sha256:8704ab60cf3a98882bf59d6770150e0c40cce07b6009a1204fd970182f37efd4"},
+]
+
+[package.dependencies]
+requests = ">=2.22.0"
+
+[package.extras]
+attacut = ["attacut (>=1.0.6)"]
+benchmarks = ["PyYAML (>=5.3.1)", "numpy (>=1.22)", "pandas (>=0.24)"]
+dependency-parsing = ["spacy-thai (>=0.7.1)", "transformers (>=4.22.1)", "ufal.chu-liu-edmonds (>=1.0.2)"]
+esupar = ["esupar (>=1.3.8)", "numpy", "transformers (>=4.22.1)"]
+full = ["PyYAML (>=5.3.1)", "attacut (>=1.0.4)", "bpemb (>=0.3.2)", "emoji (>=0.5.1)", "epitran (>=1.1)", "fairseq (>=0.10.0)", "fastai (<2.0)", "gensim (>=4.0.0)", "nlpo3 (>=1.2.2)", "nltk (>=3.3)", "numpy (>=1.22)", "onnxruntime (>=1.10.0)", "oskut (>=1.3)", "pandas (>=0.24)", "phunspell (>=0.1.6)", "pyicu (>=2.3)", "sacremoses (>=0.0.41)", "sefr-cut (>=1.1)", "sentencepiece (>=0.1.91)", "spacy-thai (>=0.7.1)", "spylls (>=0.1.5)", "ssg (>=0.0.8)", "symspellpy (>=6.7.6)", "thai-nner", "torch (>=1.0.0)", "transformers (>=4.22.1)", "ufal.chu-liu-edmonds (>=1.0.2)", "wunsen (>=0.0.3)"]
+generate = ["fastai (<2.0)"]
+icu = ["pyicu (>=2.3)"]
+ipa = ["epitran (>=1.1)"]
+ml = ["numpy (>=1.22)", "torch (>=1.0.0)"]
+mt5 = ["sentencepiece (>=0.1.91)", "transformers (>=4.6.0)"]
+nlpo3 = ["nlpo3 (>=1.2.2)"]
+onnx = ["numpy (>=1.22)", "onnxruntime (>=1.10.0)", "sentencepiece (>=0.1.91)"]
+oskut = ["oskut (>=1.3)"]
+sefr-cut = ["sefr-cut (>=1.1)"]
+spacy-thai = ["spacy-thai (>=0.7.1)"]
+spell = ["phunspell (>=0.1.6)", "spylls (>=0.1.5)", "symspellpy (>=6.7.6)"]
+ssg = ["ssg (>=0.0.8)"]
+textaugment = ["bpemb", "gensim (>=4.0.0)"]
+thai-nner = ["thai-nner"]
+thai2fit = ["emoji (>=0.5.1)", "gensim (>=4.0.0)", "numpy (>=1.22)"]
+thai2rom = ["numpy (>=1.22)", "torch (>=1.0.0)"]
+transformers-ud = ["transformers (>=4.22.1)", "ufal.chu-liu-edmonds (>=1.0.2)"]
+translate = ["fairseq (>=0.10.0)", "sacremoses (>=0.0.41)", "sentencepiece (>=0.1.91)", "torch (>=1.0.0)", "transformers (>=4.6.0)"]
+wangchanberta = ["sentencepiece (>=0.1.91)", "transformers (>=4.6.0)"]
+wordnet = ["nltk (>=3.3)"]
+wunsen = ["wunsen (>=0.0.1)"]
+
+[[package]]
 name = "python-dateutil"
 version = "2.8.2"
 description = "Extensions to the standard Python datetime module"
@@ -3428,4 +3470,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10, <3.12"
-content-hash = "21124401f37729162e00b483835361b22fc5df80ff245f9f7dd9c2131f540df1"
+content-hash = "6104e309da3443e9b19c4e877eec50d151bd9f63f470d4ceed11a69a995f8cff"
