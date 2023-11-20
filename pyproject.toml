@@ -11,6 +11,9 @@ jiwer = "^3.0.3"
 nltk = "^3.8.1"
 deepcut = "^0.7.0.0"
 more-itertools = "^10.1.0"
+datasets = "^2.15.0"
+transformers = {extras = ["torch"], version = "^4.35.2"}
+librosa = "^0.10.1"
 
 
 [tool.poetry.group.dev.dependencies]
