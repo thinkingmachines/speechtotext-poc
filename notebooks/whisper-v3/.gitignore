@@ -1,1 +1,4 @@
 data/
+*cache/
+*model/
+*checkpoints/
