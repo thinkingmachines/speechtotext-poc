@@ -3,7 +3,7 @@
 
 # # Data prep
 
-# In[41]:
+# In[1]:
 
 
 import re
@@ -31,7 +31,7 @@ from datasets import Dataset, load_from_disk
 from datasets.features import Audio
 
 
-# In[42]:
+# In[2]:
 
 
 def print_gpu_info():
@@ -55,15 +55,16 @@ print_gpu_info()
 # Data config
 TRAIN_SIZE = 0.9
 SEED = 4242
-SAMPLING = 0.001  # sampling rate
+SAMPLING = 0.00001  # sampling rate
+AUDIO_SAMPLING_RATE = 16_000
 
 # model config
 LEARNING_RATE = 0.5e-5
-WARMUP_STEPS = 10
-MAX_STEPS = 20
-SAVE_STEPS = 10
+WARMUP_STEPS = 1500
+MAX_STEPS = 5000
+SAVE_STEPS = 1000
 EVAL_STEPS = SAVE_STEPS
-LOGGING_STEPS = 5
+LOGGING_STEPS = 200
 
 # resource config
 MODEL_CHECKPOINT_DIR = Path.cwd() / "fine-tune-whisper-large-v3-checkpoints"
@@ -99,14 +100,14 @@ common_voice_metadata = (
 )
 
 
-# In[7]:
+# In[6]:
 
 
 shuffled_common_voice = common_voice_metadata.sample(frac=SAMPLING, random_state=SEED) # shuffling
 common_voice_train, common_voice_eval = train_test_split(shuffled_common_voice, test_size=(1 - TRAIN_SIZE))
 
 
-# In[8]:
+# In[7]:
 
 
 print_gpu_info()
@@ -114,7 +115,7 @@ print_gpu_info()
 
 # ## Preprocessor prep
 
-# In[9]:
+# In[8]:
 
 
 processor = WhisperProcessor.from_pretrained(
@@ -124,25 +125,30 @@ processor = WhisperProcessor.from_pretrained(
   )
 
 
-# In[10]:
+# In[9]:
 
 
-def prepare_dataset(batch):
+def prepare_dataset(batch: list[dict[str, Any]]):
     # load and resample audio data from 48 to 16kHz
-    audio = batch["audio"]
+    # print(batch)
+    audios = batch["audio"]
+    arrays = list(map(lambda a: a["array"], audios))
+    sampling_rates = list(map(lambda a: a["sampling_rate"], audios))
+    sentences = batch["sentence"]
 
     # compute log-Mel input features from input audio array
-    batch["input_features"] = processor.feature_extractor(
-        audio["array"],
-        sampling_rate=audio["sampling_rate"],
-    ).input_features[0]
+    input_features = processor.feature_extractor(
+        arrays,
+        sampling_rate=AUDIO_SAMPLING_RATE,
+    )
+    batch["input_features"] = input_features.input_features
 
     # encode target text to label ids
-    batch["labels"] = processor.tokenizer(batch["sentence"]).input_ids
+    batch["labels"] = processor.tokenizer(sentences).input_ids
     return batch
 
 
-# In[11]:
+# In[10]:
 
 
 @dataclass
@@ -173,49 +179,64 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         return batch
 
 
-# In[12]:
+# In[11]:
 
 
 # https://huggingface.co/docs/datasets/audio_dataset#local-files
 
 
-# In[13]:
+# In[12]:
 
 
 def gen_dataset(df: pd.DataFrame) -> Dataset:
     return (
         Dataset
         .from_dict({"audio": list(map(str, df.full_path.tolist())), "sentence": df.sentence.tolist()})
-        .cast_column("audio", Audio(sampling_rate=16000))
+        .cast_column("audio", Audio(sampling_rate=AUDIO_SAMPLING_RATE))
         .cast_column("sentence", datasets.Value("string"))
     )
 
 
-# In[16]:
+# In[13]:
 
 
-if DATASET_CACHE_DIR.exists():
-    train_set = load_from_disk(DATASET_CACHE_DIR / "train")
-    val_set = load_from_disk(DATASET_CACHE_DIR / "eval")
-    
-else:
-    train_set = gen_dataset(common_voice_train)
-    val_set = gen_dataset(common_voice_eval)
+config = {
+    # "num_proc": 2, 
+    # "keep_in_memory": False, 
+    # "load_from_cache_file": True, 
+    # "writer_batch_size": 20,
+}
 
-    train_set = train_set.map(prepare_dataset, num_proc=2, keep_in_memory=False, load_from_cache_file=True, writer_batch_size=300)
-    val_set = val_set.map(prepare_dataset, num_proc=2, keep_in_memory=False, load_from_cache_file=True, writer_batch_size=300)
+train_set = gen_dataset(common_voice_train)
+val_set = gen_dataset(common_voice_eval)
 
-    train_set.save_to_disk(DATASET_CACHE_DIR / "train")
-    val_set.save_to_disk(DATASET_CACHE_DIR / "eval")
+train_set = train_set.with_transform(
+    prepare_dataset, 
+    **config,
+)
+val_set = val_set.with_transform(
+    prepare_dataset, 
+    **config,
+)
+
+#     train_set.save_to_disk(DATASET_CACHE_DIR / "train")
+#     val_set.save_to_disk(DATASET_CACHE_DIR / "eval")
 
 
-# In[17]:
+# In[14]:
+
+
+# For debugging
+# next(iter(train_set.map(lambda x: x, batched=True)))
+
+
+# In[15]:
 
 
 data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
 
 
-# In[18]:
+# In[16]:
 
 
 print_gpu_info()
@@ -223,7 +244,7 @@ print_gpu_info()
 
 # # Metrics
 
-# In[19]:
+# In[17]:
 
 
 CLEAN_PATTERNS = "((นะ)?(คะ|ครับ)|เอ่อ|อ่า)"
@@ -281,7 +302,7 @@ def wer(pred: str, actual: str, **kwargs) -> float:
     return err / len(actuals)
 
 
-# In[20]:
+# In[18]:
 
 
 def compute_metrics(pred):
@@ -302,14 +323,14 @@ def compute_metrics(pred):
     return {"wer": wer}
 
 
-# In[21]:
+# In[19]:
 
 
 print(hack_wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 print(wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 
 
-# In[22]:
+# In[20]:
 
 
 print_gpu_info()
@@ -317,7 +338,7 @@ print_gpu_info()
 
 # # Model prep
 
-# In[23]:
+# In[21]:
 
 
 CHUNK_LENGTH = 30
@@ -326,14 +347,14 @@ BATCH_SIZE = 16
 N = 2
 
 
-# In[24]:
+# In[22]:
 
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 
-# In[25]:
+# In[ ]:
 
 
 from transformers import WhisperForConditionalGeneration
@@ -345,7 +366,7 @@ model = WhisperForConditionalGeneration.from_pretrained(
 )
 
 
-# In[26]:
+# In[ ]:
 
 
 model.config.forced_decoder_ids = None
@@ -353,7 +374,7 @@ model.config.suppress_tokens = []
 model.enable_input_require_grads()
 
 
-# In[27]:
+# In[ ]:
 
 
 from peft import TaskType
@@ -365,7 +386,7 @@ model = get_peft_model(model, config)
 model.print_trainable_parameters()
 
 
-# In[28]:
+# In[ ]:
 
 
 print_gpu_info()
@@ -373,13 +394,13 @@ print_gpu_info()
 
 # # Fine-tune the model
 
-# In[29]:
+# In[ ]:
 
 
 (output_dir := MODEL_CHECKPOINT_DIR).mkdir(exist_ok=True)
 
 
-# In[36]:
+# In[ ]:
 
 
 training_args = Seq2SeqTrainingArguments(
@@ -408,7 +429,7 @@ training_args = Seq2SeqTrainingArguments(
 )
 
 
-# In[37]:
+# In[ ]:
 
 
 trainer = Seq2SeqTrainer(
@@ -422,13 +443,13 @@ trainer = Seq2SeqTrainer(
 )
 
 
-# In[38]:
+# In[ ]:
 
 
 result = trainer.train()
 
 
-# In[39]:
+# In[ ]:
 
 
 metric = result.metrics
@@ -438,7 +459,7 @@ print(result, end="\n\n")
 print(f"GPU Flops perf: {metric['total_flos'] / metric['train_runtime'] / (1024**4)} TFLOPS")
 
 
-# In[34]:
+# In[ ]:
 
 
 model.save_pretrained(FINAL_MODEL_OUTPUT_DIR)
