@@ -3,7 +3,7 @@
 
 # # Data prep
 
-# In[2]:
+# In[45]:
 
 
 import re
@@ -15,6 +15,7 @@ import multiprocessing as mp
 from dataclasses import dataclass
 from typing import Any, Dict
 from pathlib import Path
+from itertools import compress
 
 # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 
@@ -32,7 +33,7 @@ from datasets import Dataset, load_from_disk
 from datasets.features import Audio
 
 
-# In[3]:
+# In[46]:
 
 
 def print_gpu_info():
@@ -50,8 +51,12 @@ print_gpu_info()
 # !wget https://storage.googleapis.com/common-voice-prod-prod-datasets/cv-corpus-15.0-2023-09-08/cv-corpus-15.0-2023-09-08-th.tar.gz\?X-Goog-Algorithm\=GOOG4-RSA-SHA256\&X-Goog-Credential\=gke-prod%40moz-fx-common-voice-prod.iam.gserviceaccount.com%2F20231120%2Fauto%2Fstorage%2Fgoog4_request\&X-Goog-Date\=20231120T211937Z\&X-Goog-Expires\=43200\&X-Goog-SignedHeaders\=host\&X-Goog-Signature\=7b63c1ccdb27c7a2f2b1b5e59422ab38668543f242283238b92d39552aa12a2686ba413b29107e71c8fa75d850decf8d5f9e1f5c0f6b72da42154cf478ebe296f8445d1744267a3ad40391433517c9ad8735b26cfe5c53e777feffac2a71d54ee7ce47cb1c580449340a84d066271a57a2beba416de0d7e897ad7bd99f13e68e0d8a1a2cc1c2dbf2341740fd167e1d6572d84b23c9daee4139dd35cc8f827db052a05021ca1c25549baa18c823ed1c25347cd10972451718ac13c73b656bbc69134ebbcce7206ad38c6e3611ac59881e8a630abbdf7390b689bb74d7fe35cb80366742d76cf5a6eb462e6da408dd2bb05a97cd8b89a4110479d62f9dc6f84c4e
 # ```
 
-# In[4]:
+# In[47]:
 
+
+# Device config
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
+torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 # Data config
 TRAIN_SIZE = 0.99
@@ -86,6 +91,7 @@ EVAL_MAX_N_FILES = 500
 TRAIN_MAX_N_FILES = None
 OPTIMIZER = "adamw_bnb_8bit"
 DROPOUT = 0.1
+MAX_LABEL_LENGTH = 448
 
 CHUNK_LENGTH = 30
 NUM_BEAMS = 1
@@ -104,7 +110,7 @@ COMMON_VOICE_PATH = DATA_PATH /  "cv-corpus-15" / "th"
 AUDIO_BASE_PATH = COMMON_VOICE_PATH / "clips"
 
 
-# In[5]:
+# In[48]:
 
 
 def remove_punct(s: str) -> str:
@@ -113,7 +119,7 @@ def remove_punct(s: str) -> str:
 remove_punct("ไหน?ลองซิ! ...")
 
 
-# In[6]:
+# In[49]:
 
 
 common_voice_metadata = (
@@ -127,14 +133,14 @@ common_voice_metadata = (
 )
 
 
-# In[7]:
+# In[50]:
 
 
 shuffled_common_voice = common_voice_metadata.sample(frac=SAMPLING, random_state=SEED) # shuffling
 common_voice_train, common_voice_eval = train_test_split(shuffled_common_voice, test_size=(1 - TRAIN_SIZE))
 
 
-# In[8]:
+# In[51]:
 
 
 print_gpu_info()
@@ -142,7 +148,7 @@ print_gpu_info()
 
 # ## Preprocessor prep
 
-# In[9]:
+# In[52]:
 
 
 processor = WhisperProcessor.from_pretrained(
@@ -152,29 +158,54 @@ processor = WhisperProcessor.from_pretrained(
   )
 
 
-# In[10]:
+# In[53]:
 
 
 def prepare_dataset(batch: list[dict[str, Any]]):
+#     # load and resample audio data from 48 to 16kHz
+#     audios = batch["audio"]
+#     arrays = list(map(lambda a: a["array"], audios))
+#     sampling_rates = list(map(lambda a: a["sampling_rate"], audios))
+#     sentences = batch["sentence"]
+
+#     # compute log-Mel input features from input audio array
+#     input_features = processor.feature_extractor(
+#         arrays,
+#         sampling_rate=AUDIO_SAMPLING_RATE,
+#     )
+#     batch["input_features"] = input_features.input_features
+
+#     # encode target text to label ids
+#     batch["labels"] = processor.tokenizer(sentences).input_ids
+#     return batch
+
     # load and resample audio data from 48 to 16kHz
     audios = batch["audio"]
     arrays = list(map(lambda a: a["array"], audios))
     sampling_rates = list(map(lambda a: a["sampling_rate"], audios))
     sentences = batch["sentence"]
+    labels = processor.tokenizer(sentences).input_ids
+    
+    # Filter out label longer than max label length
+    is_shorter = [len(label) < MAX_LABEL_LENGTH for label in labels]
 
     # compute log-Mel input features from input audio array
     input_features = processor.feature_extractor(
-        arrays,
+        list(compress(arrays, is_shorter)),
         sampling_rate=AUDIO_SAMPLING_RATE,
     )
     batch["input_features"] = input_features.input_features
 
     # encode target text to label ids
-    batch["labels"] = processor.tokenizer(sentences).input_ids
+    batch["labels"] = list(compress(labels, is_shorter))
+    
+    # reassign
+    batch["sentence"] = list(compress(sentences, is_shorter))
+    batch["audio"] = list(compress(audios, is_shorter))
     return batch
 
 
-# In[11]:
+# In[54]:
 
 
 @dataclass
@@ -205,13 +236,13 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         return batch
 
 
-# In[12]:
+# In[55]:
 
 
 # https://huggingface.co/docs/datasets/audio_dataset#local-files
 
 
-# In[13]:
+# In[56]:
 
 
 def gen_dataset(df: pd.DataFrame) -> Dataset:
@@ -223,14 +254,14 @@ def gen_dataset(df: pd.DataFrame) -> Dataset:
     )
 
 
-# In[14]:
+# In[57]:
 
 
 train_set = gen_dataset(common_voice_train.iloc[:TRAIN_MAX_N_FILES])
 val_set = gen_dataset(common_voice_eval.iloc[:EVAL_MAX_N_FILES])
 
 
-# In[15]:
+# In[58]:
 
 
 def load_or_new_process(dataset, config, train_val = "train"):
@@ -251,7 +282,7 @@ def load_or_new_process(dataset, config, train_val = "train"):
     return dataset
 
 
-# In[16]:
+# In[59]:
 
 
 if not DATASET_CACHE_DIR.exists(): DATASET_CACHE_DIR.mkdir(exist_ok=True)
@@ -260,20 +291,20 @@ train_set = load_or_new_process(train_set, config, "train")
 val_set = load_or_new_process(val_set, config, "val")
 
 
-# In[17]:
+# In[60]:
 
 
 # For debugging
 # next(iter(train_set.map(lambda x: x, batched=True)))
 
 
-# In[18]:
+# In[61]:
 
 
 data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
 
 
-# In[19]:
+# In[62]:
 
 
 print_gpu_info()
@@ -281,7 +312,7 @@ print_gpu_info()
 
 # # Metrics
 
-# In[20]:
+# In[19]:
 
 
 CLEAN_PATTERNS = "((นะ)?(คะ|ครับ)|เอ่อ|อ่า)"
@@ -339,7 +370,7 @@ def wer(pred: str, actual: str, **kwargs) -> float:
     return err / len(actuals)
 
 
-# In[21]:
+# In[20]:
 
 
 def compute_metrics(pred):
@@ -362,14 +393,14 @@ def compute_metrics(pred):
     return {"wer": wer}
 
 
-# In[22]:
+# In[21]:
 
 
 print(hack_wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 print(wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 
 
-# In[23]:
+# In[22]:
 
 
 print_gpu_info()
@@ -380,13 +411,6 @@ print_gpu_info()
 # In[24]:
 
 
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-
-
-# In[25]:
-
-
 model = WhisperForConditionalGeneration.from_pretrained(
     MODEL_PATH_OR_URL,
     # torch_dtype=torch_dtype,
@@ -394,7 +418,7 @@ model = WhisperForConditionalGeneration.from_pretrained(
 )
 
 
-# In[26]:
+# In[25]:
 
 
 model.config.forced_decoder_ids = None
@@ -403,7 +427,7 @@ model.config.drop_out = DROPOUT
 model.enable_input_require_grads()
 
 
-# In[27]:
+# In[26]:
 
 
 print_gpu_info()
@@ -411,13 +435,13 @@ print_gpu_info()
 
 # # Fine-tune the model
 
-# In[28]:
+# In[27]:
 
 
 (output_dir := MODEL_CHECKPOINT_DIR).mkdir(exist_ok=True)
 
 
-# In[29]:
+# In[63]:
 
 
 training_args = Seq2SeqTrainingArguments(
@@ -448,7 +472,7 @@ training_args = Seq2SeqTrainingArguments(
 )
 
 
-# In[30]:
+# In[64]:
 
 
 trainer = Seq2SeqTrainer(
