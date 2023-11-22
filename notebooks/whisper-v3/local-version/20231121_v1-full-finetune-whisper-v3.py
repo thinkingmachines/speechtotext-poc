@@ -3,7 +3,7 @@
 
 # # Data prep
 
-# In[15]:
+# In[1]:
 
 
 import re
@@ -26,12 +26,12 @@ from peft import LoraConfig, PeftModel, LoraModel, LoraConfig, get_peft_model, p
 # from deepcut import tokenize  # Consume too much memory when using with CUDA
 from pythainlp.tokenize import word_tokenize as tokenize
 from sklearn.model_selection import train_test_split
-from transformers import WhisperProcessor, pipeline, Seq2SeqTrainingArguments, Seq2SeqTrainer
+from transformers import WhisperProcessor, pipeline, Seq2SeqTrainingArguments, Seq2SeqTrainer, WhisperForConditionalGeneration
 from datasets import Dataset, load_from_disk
 from datasets.features import Audio
 
 
-# In[16]:
+# In[2]:
 
 
 def print_gpu_info():
@@ -49,25 +49,41 @@ print_gpu_info()
 # !wget https://storage.googleapis.com/common-voice-prod-prod-datasets/cv-corpus-15.0-2023-09-08/cv-corpus-15.0-2023-09-08-th.tar.gz\?X-Goog-Algorithm\=GOOG4-RSA-SHA256\&X-Goog-Credential\=gke-prod%40moz-fx-common-voice-prod.iam.gserviceaccount.com%2F20231120%2Fauto%2Fstorage%2Fgoog4_request\&X-Goog-Date\=20231120T211937Z\&X-Goog-Expires\=43200\&X-Goog-SignedHeaders\=host\&X-Goog-Signature\=7b63c1ccdb27c7a2f2b1b5e59422ab38668543f242283238b92d39552aa12a2686ba413b29107e71c8fa75d850decf8d5f9e1f5c0f6b72da42154cf478ebe296f8445d1744267a3ad40391433517c9ad8735b26cfe5c53e777feffac2a71d54ee7ce47cb1c580449340a84d066271a57a2beba416de0d7e897ad7bd99f13e68e0d8a1a2cc1c2dbf2341740fd167e1d6572d84b23c9daee4139dd35cc8f827db052a05021ca1c25549baa18c823ed1c25347cd10972451718ac13c73b656bbc69134ebbcce7206ad38c6e3611ac59881e8a630abbdf7390b689bb74d7fe35cb80366742d76cf5a6eb462e6da408dd2bb05a97cd8b89a4110479d62f9dc6f84c4e
 # ```
 
-# In[17]:
+# In[3]:
 
 
 # Data config
-TRAIN_SIZE = 0.9
+TRAIN_SIZE = 0.99
 SEED = 4242
 SAMPLING = 1  # sampling rate
 AUDIO_SAMPLING_RATE = 16_000
+MODEL_PATH_OR_URL = "openai/whisper-large-v3"
+
+# DATA processing config
+NUM_PROC = 4
+WRITER_BATCH_SIZE = 128
+DATA_PROCESS_BATCH_SIZE = 128
+
+config = {
+    "num_proc": NUM_PROC, 
+    "keep_in_memory": False, 
+    "load_from_cache_file": True, 
+    "writer_batch_size": WRITER_BATCH_SIZE,
+    "load_from_cache_file": True,
+    "batch_size": DATA_PROCESS_BATCH_SIZE,
+    "batched": True,
+}
 
 # model config
-LEARNING_RATE = 0.5e-5
+LEARNING_RATE = 0.5e-6
 WARMUP_STEPS = 1500
 MAX_STEPS = 5000
-SAVE_STEPS = 1000
+SAVE_STEPS = 500
 EVAL_STEPS = SAVE_STEPS
-LOGGING_STEPS = 200
+LOGGING_STEPS = 50
 
 CHUNK_LENGTH = 30
-NUM_BEAMS = 2
+NUM_BEAMS = 1
 BATCH_SIZE = 16
 N = 1
 
@@ -82,7 +98,7 @@ COMMON_VOICE_PATH = DATA_PATH /  "cv-corpus-15" / "th"
 AUDIO_BASE_PATH = COMMON_VOICE_PATH / "clips"
 
 
-# In[18]:
+# In[4]:
 
 
 def remove_punct(s: str) -> str:
@@ -91,7 +107,7 @@ def remove_punct(s: str) -> str:
 remove_punct("ไหน?ลองซิ! ...")
 
 
-# In[19]:
+# In[5]:
 
 
 common_voice_metadata = (
@@ -105,14 +121,14 @@ common_voice_metadata = (
 )
 
 
-# In[20]:
+# In[6]:
 
 
 shuffled_common_voice = common_voice_metadata.sample(frac=SAMPLING, random_state=SEED) # shuffling
 common_voice_train, common_voice_eval = train_test_split(shuffled_common_voice, test_size=(1 - TRAIN_SIZE))
 
 
-# In[21]:
+# In[7]:
 
 
 print_gpu_info()
@@ -120,7 +136,7 @@ print_gpu_info()
 
 # ## Preprocessor prep
 
-# In[22]:
+# In[8]:
 
 
 processor = WhisperProcessor.from_pretrained(
@@ -130,12 +146,11 @@ processor = WhisperProcessor.from_pretrained(
   )
 
 
-# In[23]:
+# In[9]:
 
 
 def prepare_dataset(batch: list[dict[str, Any]]):
     # load and resample audio data from 48 to 16kHz
-    # print(batch)
     audios = batch["audio"]
     arrays = list(map(lambda a: a["array"], audios))
     sampling_rates = list(map(lambda a: a["sampling_rate"], audios))
@@ -153,7 +168,7 @@ def prepare_dataset(batch: list[dict[str, Any]]):
     return batch
 
 
-# In[24]:
+# In[10]:
 
 
 @dataclass
@@ -174,74 +189,84 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
-        # if bos token is appended in previous tokenization step,
-        # cut bos token here as it's append later anyways
-        if (labels[:, 0] == self.processor.tokenizer.bos_token_id).all().cpu().item():
-            labels = labels[:, 1:]
+        # # if bos token is appended in previous tokenization step,
+        # # cut bos token here as it's append later anyways
+        # if (labels[:, 0] == self.processor.tokenizer.bos_token_id).all().cpu().item():
+        #     labels = labels[:, 1:]
 
         batch["labels"] = labels
 
         return batch
 
 
-# In[25]:
+# In[11]:
 
 
 # https://huggingface.co/docs/datasets/audio_dataset#local-files
 
 
-# In[26]:
+# In[12]:
 
 
 def gen_dataset(df: pd.DataFrame) -> Dataset:
     return (
         Dataset
-        .from_dict({"audio": list(map(str, df.full_path.tolist())), "sentence": df.sentence.tolist()})
+        .from_dict({"audio": list(map(str, df.full_path.tolist())), "sentence": df.sentence.tolist(), "path": list(map(str, df.full_path.tolist()))})
         .cast_column("audio", Audio(sampling_rate=AUDIO_SAMPLING_RATE))
         .cast_column("sentence", datasets.Value("string"))
     )
 
 
-# In[27]:
+# In[13]:
 
 
-config = {
-    # "num_proc": 2, 
-    # "keep_in_memory": False, 
-    # "load_from_cache_file": True, 
-    # "writer_batch_size": 20,
-}
-
-train_set = gen_dataset(common_voice_train)
+train_set = gen_dataset(common_voice_train.iloc[:MAX_STEPS * BATCH_SIZE])
 val_set = gen_dataset(common_voice_eval)
 
-train_set = train_set.with_transform(
-    prepare_dataset, 
-    **config,
-)
-val_set = val_set.with_transform(
-    prepare_dataset, 
-    **config,
-)
 
-#     train_set.save_to_disk(DATASET_CACHE_DIR / "train")
-#     val_set.save_to_disk(DATASET_CACHE_DIR / "eval")
+# In[14]:
 
 
-# In[28]:
+def load_or_new_process(dataset, config, train_val = "train"):
+    
+    name = f"{MAX_STEPS * BATCH_SIZE // 1_000}k-size-{train_val}"
+    
+    if (DATASET_CACHE_DIR / train_val).exists():
+        dataset = load_from_disk(DATASET_CACHE_DIR / name)
+    else:
+        dataset = dataset.map(
+            prepare_dataset, 
+            cache_file_name=str(DATASET_CACHE_DIR / f"{name}.pt"),
+            **config,
+        )
+        dataset.save_to_disk(DATASET_CACHE_DIR / name)
+        
+    return dataset
+
+
+# In[ ]:
+
+
+if not DATASET_CACHE_DIR.exists(): DATASET_CACHE_DIR.mkdir(exist_ok=True)
+
+train_set = load_or_new_process(train_set, config, "train")
+val_set = load_or_new_process(val_set, config, "val")
+
+
+# In[ ]:
 
 
 # For debugging
 # next(iter(train_set.map(lambda x: x, batched=True)))
 
 
-# In[29]:
+# In[ ]:
 
 
 data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
 
 
-# In[30]:
+# In[ ]:
 
 
 print_gpu_info()
@@ -249,7 +274,7 @@ print_gpu_info()
 
 # # Metrics
 
-# In[31]:
+# In[ ]:
 
 
 CLEAN_PATTERNS = "((นะ)?(คะ|ครับ)|เอ่อ|อ่า)"
@@ -307,7 +332,7 @@ def wer(pred: str, actual: str, **kwargs) -> float:
     return err / len(actuals)
 
 
-# In[32]:
+# In[ ]:
 
 
 def compute_metrics(pred):
@@ -328,14 +353,14 @@ def compute_metrics(pred):
     return {"wer": wer}
 
 
-# In[33]:
+# In[ ]:
 
 
 print(hack_wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 print(wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 
 
-# In[34]:
+# In[ ]:
 
 
 print_gpu_info()
@@ -343,26 +368,24 @@ print_gpu_info()
 
 # # Model prep
 
-# In[35]:
+# In[ ]:
 
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 
-# In[37]:
+# In[ ]:
 
-
-from transformers import WhisperForConditionalGeneration
 
 model = WhisperForConditionalGeneration.from_pretrained(
-    "openai/whisper-large-v3",
+    MODEL_PATH_OR_URL,
     # torch_dtype=torch_dtype,
     num_beams=NUM_BEAMS,
 )
 
 
-# In[38]:
+# In[ ]:
 
 
 model.config.forced_decoder_ids = None
@@ -370,7 +393,7 @@ model.config.suppress_tokens = []
 model.enable_input_require_grads()
 
 
-# In[39]:
+# In[ ]:
 
 
 print_gpu_info()
@@ -378,13 +401,13 @@ print_gpu_info()
 
 # # Fine-tune the model
 
-# In[40]:
+# In[ ]:
 
 
 (output_dir := MODEL_CHECKPOINT_DIR).mkdir(exist_ok=True)
 
 
-# In[41]:
+# In[ ]:
 
 
 training_args = Seq2SeqTrainingArguments(
@@ -401,7 +424,7 @@ training_args = Seq2SeqTrainingArguments(
     evaluation_strategy="steps",
     per_device_eval_batch_size=max(BATCH_SIZE // N // 2, 1),
     predict_with_generate=True,
-    generation_max_length=225,
+    # generation_max_length=225, 
     save_steps=SAVE_STEPS, # 1000
     eval_steps=SAVE_STEPS, # 1000
     logging_steps=LOGGING_STEPS,
@@ -413,7 +436,7 @@ training_args = Seq2SeqTrainingArguments(
 )
 
 
-# In[42]:
+# In[ ]:
 
 
 trainer = Seq2SeqTrainer(
@@ -454,6 +477,23 @@ model.save_pretrained(FINAL_MODEL_OUTPUT_DIR)
 # In[ ]:
 
 
+# # Load from checkpoint or full fine-tune
+# processor = WhisperProcessor.from_pretrained(
+#     "openai/whisper-large-v3",
+#     language="Thai",
+#     task="transcribe",
+#   )
+
+# model = WhisperForConditionalGeneration.from_pretrained(
+#     MODEL_PATH_OR_URL,
+#     # torch_dtype=torch_dtype,
+#     num_beams=NUM_BEAMS,
+# )
+
+
+# In[ ]:
+
+
 pipe = pipeline(
     "automatic-speech-recognition",
     model=model, tokenizer=processor.tokenizer,
@@ -465,23 +505,7 @@ pipe = pipeline(
 # In[ ]:
 
 
-# Load base model and plugin Peft fine-tuned params to getbak our model
-# model = WhisperForConditionalGeneration.from_pretrained(
-#     "openai/whisper-large-v3",
-#     torch_dtype=torch_dtype,
-#     num_beams=NUM_BEAMS,
-# )
-
-## Load from finalized model
-# model = PeftModel.from_pretrained(model, FINAL_MODEL_OUTPUT_DIR)
-## Load from checkpoint
-# model = PeftModel.from_pretrained(model, MODEL_CHECKPOINT_DIR / "checkpoint-0008")
-
-
-# In[ ]:
-
-
-
+pipe(val_set[-2]["path"])
 
 
 # # Eval
