@@ -108,6 +108,7 @@ N = 4
 MODEL_CHECKPOINT_DIR = Path.cwd() / "fine-tune-whisper-large-v3-checkpoints"
 DATASET_CACHE_DIR = Path.cwd() / "dataset-cache"
 FINAL_MODEL_OUTPUT_DIR = Path.cwd() / "fine-tune-model"
+FINAL_PROC_OUTPUT_DIR = Path.cwd() / "fine-tune-proc"
 
 PRJ_ROOT = Path.cwd().parents[2]
 DATA_PATH = PRJ_ROOT / "notebooks" / "whisper-v3" / "data"
@@ -506,6 +507,7 @@ print(f"GPU Flops perf: {metric['total_flos'] / metric['train_runtime'] / (1024*
 
 
 model.save_pretrained(FINAL_MODEL_OUTPUT_DIR)
+processor.save_pretrained(FINAL_PROC_OUTPUT_DIR)
 
 
 # # Inference
