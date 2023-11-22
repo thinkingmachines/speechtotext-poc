@@ -11,6 +11,7 @@ import requests
 import string
 import os
 import subprocess
+import multiprocessing as mp
 from dataclasses import dataclass
 from typing import Any, Dict
 from pathlib import Path
@@ -76,12 +77,13 @@ config = {
 
 # model config
 LEARNING_RATE = 0.5e-6
-WARMUP_STEPS = 1500
+WARMUP_STEPS = 1000
 MAX_STEPS = 5000
-SAVE_STEPS = 500
+SAVE_STEPS = 1000
 EVAL_STEPS = SAVE_STEPS
-LOGGING_STEPS = 50
-EVAL_MAX_N_FILES = 3_600
+LOGGING_STEPS = 100
+EVAL_MAX_N_FILES = 500
+TRAIN_MAX_N_FILES = None
 
 CHUNK_LENGTH = 30
 NUM_BEAMS = 1
@@ -221,7 +223,7 @@ def gen_dataset(df: pd.DataFrame) -> Dataset:
 # In[13]:
 
 
-train_set = gen_dataset(common_voice_train)
+train_set = gen_dataset(common_voice_train.iloc[:TRAIN_MAX_N_FILES])
 val_set = gen_dataset(common_voice_eval.iloc[:EVAL_MAX_N_FILES])
 
 
@@ -349,8 +351,10 @@ def compute_metrics(pred):
     pred_strs = processor.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_strs = processor.tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
-    wers = list(map(hack_wer, pred_strs, label_strs))
-    wer = sum(map(lambda w: w * 100, wers)) / len(wers)
+    with mp.Pool(8) as pool:
+        
+        wers = list(pool.starmap(hack_wer, zip(pred_strs, label_strs)))
+        wer = sum(wers) * 100 / len(wers)
 
     return {"wer": wer}
 
@@ -377,7 +381,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 
-# In[25]:
+# In[24]:
 
 
 model = WhisperForConditionalGeneration.from_pretrained(
@@ -387,7 +391,7 @@ model = WhisperForConditionalGeneration.from_pretrained(
 )
 
 
-# In[26]:
+# In[25]:
 
 
 model.config.forced_decoder_ids = None
@@ -395,7 +399,7 @@ model.config.suppress_tokens = []
 model.enable_input_require_grads()
 
 
-# In[27]:
+# In[26]:
 
 
 print_gpu_info()
@@ -403,13 +407,13 @@ print_gpu_info()
 
 # # Fine-tune the model
 
-# In[28]:
+# In[27]:
 
 
 (output_dir := MODEL_CHECKPOINT_DIR).mkdir(exist_ok=True)
 
 
-# In[29]:
+# In[28]:
 
 
 training_args = Seq2SeqTrainingArguments(
@@ -424,7 +428,7 @@ training_args = Seq2SeqTrainingArguments(
     fp16=True,
     tf32=True,
     evaluation_strategy="steps",
-    per_device_eval_batch_size=max(BATCH_SIZE // N // 2, 1),
+    per_device_eval_batch_size=BATCH_SIZE // N,
     predict_with_generate=True,
     # generation_max_length=225, 
     save_steps=SAVE_STEPS, # 1000
@@ -438,7 +442,7 @@ training_args = Seq2SeqTrainingArguments(
 )
 
 
-# In[30]:
+# In[29]:
 
 
 trainer = Seq2SeqTrainer(
@@ -452,7 +456,7 @@ trainer = Seq2SeqTrainer(
 )
 
 
-# In[ ]:
+# In[30]:
 
 
 result = trainer.train()
@@ -508,6 +512,12 @@ pipe = pipeline(
 
 
 pipe(val_set[-2]["path"])
+
+
+# In[ ]:
+
+
+val_set[-2]["sentence"]
 
 
 # # Eval
