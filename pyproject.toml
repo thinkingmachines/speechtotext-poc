@@ -18,6 +18,7 @@ pythainlp = "4.0.2"
 torch = "2.0.1"
 peft = "0.6.2"
 nbconvert = "7.11.0"
+bitsandbytes = "^0.41.2.post2"
 
 
 [tool.poetry.group.dev.dependencies]
