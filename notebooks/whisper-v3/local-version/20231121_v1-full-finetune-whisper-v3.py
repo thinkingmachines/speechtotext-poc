@@ -81,6 +81,7 @@ MAX_STEPS = 5000
 SAVE_STEPS = 500
 EVAL_STEPS = SAVE_STEPS
 LOGGING_STEPS = 50
+EVAL_MAX_N_FILES = 3_600
 
 CHUNK_LENGTH = 30
 NUM_BEAMS = 1
@@ -220,8 +221,8 @@ def gen_dataset(df: pd.DataFrame) -> Dataset:
 # In[13]:
 
 
-train_set = gen_dataset(common_voice_train.iloc[:MAX_STEPS * BATCH_SIZE])
-val_set = gen_dataset(common_voice_eval)
+train_set = gen_dataset(common_voice_train)
+val_set = gen_dataset(common_voice_eval.iloc[:EVAL_MAX_N_FILES])
 
 
 # In[14]:
@@ -229,22 +230,23 @@ val_set = gen_dataset(common_voice_eval)
 
 def load_or_new_process(dataset, config, train_val = "train"):
     
-    name = f"{MAX_STEPS * BATCH_SIZE // 1_000}k-size-{train_val}"
+#     name = f"{MAX_STEPS * BATCH_SIZE // 1_000}k-size-{train_val}"
     
-    if (DATASET_CACHE_DIR / train_val).exists():
-        dataset = load_from_disk(DATASET_CACHE_DIR / name)
-    else:
-        dataset = dataset.map(
-            prepare_dataset, 
-            cache_file_name=str(DATASET_CACHE_DIR / f"{name}.pt"),
-            **config,
-        )
-        dataset.save_to_disk(DATASET_CACHE_DIR / name)
-        
+#     if (DATASET_CACHE_DIR / train_val).exists():
+#         dataset = load_from_disk(DATASET_CACHE_DIR / name)
+#     else:
+#         dataset = dataset.map(
+#             prepare_dataset, 
+#             cache_file_name=str(DATASET_CACHE_DIR / f"{name}.pt"),
+#             **config,
+#         )
+#         dataset.save_to_disk(DATASET_CACHE_DIR / name)
+    
+    dataset = dataset.with_transform(prepare_dataset)
     return dataset
 
 
-# In[ ]:
+# In[15]:
 
 
 if not DATASET_CACHE_DIR.exists(): DATASET_CACHE_DIR.mkdir(exist_ok=True)
@@ -253,20 +255,20 @@ train_set = load_or_new_process(train_set, config, "train")
 val_set = load_or_new_process(val_set, config, "val")
 
 
-# In[ ]:
+# In[16]:
 
 
 # For debugging
 # next(iter(train_set.map(lambda x: x, batched=True)))
 
 
-# In[ ]:
+# In[17]:
 
 
 data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
 
 
-# In[ ]:
+# In[18]:
 
 
 print_gpu_info()
@@ -274,7 +276,7 @@ print_gpu_info()
 
 # # Metrics
 
-# In[ ]:
+# In[19]:
 
 
 CLEAN_PATTERNS = "((นะ)?(คะ|ครับ)|เอ่อ|อ่า)"
@@ -332,7 +334,7 @@ def wer(pred: str, actual: str, **kwargs) -> float:
     return err / len(actuals)
 
 
-# In[ ]:
+# In[20]:
 
 
 def compute_metrics(pred):
@@ -353,14 +355,14 @@ def compute_metrics(pred):
     return {"wer": wer}
 
 
-# In[ ]:
+# In[21]:
 
 
 print(hack_wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 print(wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 
 
-# In[ ]:
+# In[22]:
 
 
 print_gpu_info()
@@ -368,14 +370,14 @@ print_gpu_info()
 
 # # Model prep
 
-# In[ ]:
+# In[23]:
 
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 
-# In[ ]:
+# In[25]:
 
 
 model = WhisperForConditionalGeneration.from_pretrained(
@@ -385,7 +387,7 @@ model = WhisperForConditionalGeneration.from_pretrained(
 )
 
 
-# In[ ]:
+# In[26]:
 
 
 model.config.forced_decoder_ids = None
@@ -393,7 +395,7 @@ model.config.suppress_tokens = []
 model.enable_input_require_grads()
 
 
-# In[ ]:
+# In[27]:
 
 
 print_gpu_info()
@@ -401,13 +403,13 @@ print_gpu_info()
 
 # # Fine-tune the model
 
-# In[ ]:
+# In[28]:
 
 
 (output_dir := MODEL_CHECKPOINT_DIR).mkdir(exist_ok=True)
 
 
-# In[ ]:
+# In[29]:
 
 
 training_args = Seq2SeqTrainingArguments(
@@ -436,7 +438,7 @@ training_args = Seq2SeqTrainingArguments(
 )
 
 
-# In[ ]:
+# In[30]:
 
 
 trainer = Seq2SeqTrainer(
