@@ -85,14 +85,15 @@ LEARNING_RATE = 1e-6
 WARMUP_STEPS = 1000
 MAX_STEPS = 5000
 SAVE_STEPS = 1000
-EVAL_STEPS = 1000
+EVAL_STEPS = 500
 LOGGING_STEPS = 25
 EVAL_MAX_N_FILES = 500
 TRAIN_MAX_N_FILES = None
 OPTIMIZER = "adamw_bnb_8bit"
 DROPOUT = 0.1
-MAX_LABEL_LENGTH = 448
 
+MAX_LABEL_LENGTH = 448
+GENERATION_MAX_LENGTH = 225
 CHUNK_LENGTH = 30
 NUM_BEAMS = 1
 BATCH_SIZE = 16
@@ -435,7 +436,7 @@ training_args = Seq2SeqTrainingArguments(
     evaluation_strategy="steps",
     per_device_eval_batch_size=EVAL_BATCH_SIZE,
     predict_with_generate=True,
-    generation_max_length=225, 
+    generation_max_length=GENERATION_MAX_LENGTH, 
     save_steps=SAVE_STEPS, # 1000
     eval_steps=SAVE_STEPS, # 1000
     logging_steps=LOGGING_STEPS,
@@ -463,7 +464,7 @@ trainer = Seq2SeqTrainer(
 )
 
 
-# In[29]:
+# In[ ]:
 
 
 result = trainer.train()
