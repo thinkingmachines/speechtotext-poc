@@ -484,10 +484,8 @@ def compute_metrics(pred):
     pred_strs = processor.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
     label_strs = processor.tokenizer.batch_decode(label_ids, skip_special_tokens=True)
 
-    with mp.Pool(10) as pool:
-        
-        wers = list(pool.starmap(hack_wer, zip(pred_strs, label_strs)))
-        wer = sum(wers) * 100 / len(wers)
+    wers = list(map(hack_wer, pred_strs, label_strs))
+    wer = sum(wers) * 100 / len(wers)
 
     return {"wer": wer}
 
