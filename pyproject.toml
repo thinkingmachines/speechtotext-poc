@@ -18,11 +18,11 @@ pythainlp = "4.0.2"
 torch = "2.0.1"
 peft = "0.6.2"
 nbconvert = "7.11.0"
-bitsandbytes = "^0.41.2.post2"
-pysrt = "^1.1.2"
-moviepy = "^1.0.3"
-gdown = "^4.7.1"
-torchaudio = "^0.13"
+bitsandbytes = "0.41.2.post2"
+pysrt = "1.1.2"
+moviepy = "1.0.3"
+gdown = "4.7.1"
+torchaudio = "2.0.2"
 
 
 [tool.poetry.group.dev.dependencies]
