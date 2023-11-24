@@ -3,7 +3,7 @@
 
 # # Data prep
 
-# In[11]:
+# In[1]:
 
 
 import re
@@ -26,6 +26,7 @@ import jiwer
 import numpy as np
 import pandas as pd
 import tensorflow as tf   
+from IPython.display import Audio as audio_display
 from deepcut import tokenize  # Consume too much memory when using with CUDA
 # from pythainlp.tokenize import word_tokenize as tokenize
 from pythainlp.util import normalize
@@ -38,7 +39,7 @@ from datasets.features import Audio
 tf.keras.utils.disable_interactive_logging()
 
 
-# In[3]:
+# In[2]:
 
 
 def print_gpu_info():
@@ -56,7 +57,7 @@ print_gpu_info()
 # !wget https://storage.googleapis.com/common-voice-prod-prod-datasets/cv-corpus-15.0-2023-09-08/cv-corpus-15.0-2023-09-08-th.tar.gz\?X-Goog-Algorithm\=GOOG4-RSA-SHA256\&X-Goog-Credential\=gke-prod%40moz-fx-common-voice-prod.iam.gserviceaccount.com%2F20231120%2Fauto%2Fstorage%2Fgoog4_request\&X-Goog-Date\=20231120T211937Z\&X-Goog-Expires\=43200\&X-Goog-SignedHeaders\=host\&X-Goog-Signature\=7b63c1ccdb27c7a2f2b1b5e59422ab38668543f242283238b92d39552aa12a2686ba413b29107e71c8fa75d850decf8d5f9e1f5c0f6b72da42154cf478ebe296f8445d1744267a3ad40391433517c9ad8735b26cfe5c53e777feffac2a71d54ee7ce47cb1c580449340a84d066271a57a2beba416de0d7e897ad7bd99f13e68e0d8a1a2cc1c2dbf2341740fd167e1d6572d84b23c9daee4139dd35cc8f827db052a05021ca1c25549baa18c823ed1c25347cd10972451718ac13c73b656bbc69134ebbcce7206ad38c6e3611ac59881e8a630abbdf7390b689bb74d7fe35cb80366742d76cf5a6eb462e6da408dd2bb05a97cd8b89a4110479d62f9dc6f84c4e
 # ```
 
-# In[4]:
+# In[3]:
 
 
 # Device config
@@ -130,7 +131,7 @@ TEST_PATH = DATA_PATH / "stt-dataset" / "test"
 TEST_AUDIO_BASE_PATH = TEST_PATH / "[TH] Oppday Q2_2023 IP บมจ. อินเตอร์ ฟาร์มา"
 
 
-# In[5]:
+# In[4]:
 
 
 def remove_punct(s: str) -> str:
@@ -142,7 +143,7 @@ def remove_punct(s: str) -> str:
 remove_punct("ไหน?ลองซิ! ...")
 
 
-# In[14]:
+# In[36]:
 
 
 gow_train = (GOWAJEE_PATH / "train" / "text").read_text().split("\n")
@@ -150,10 +151,10 @@ gow_dev = (GOWAJEE_PATH / "dev" / "text").read_text().split("\n")
 gow_test = (GOWAJEE_PATH / "test" / "text").read_text().split("\n")
 
 gow_data = chain(gow_train, gow_dev, gow_test)
-gow_data = map(lambda s: ((ls := s.split(" "))[0] + ".wav", "".join(ls[1:])), gow_data)
+gow_data = list(map(lambda s: ((ls := s.split(" "))[0] + ".wav", "".join(ls[1:])), gow_data))
 
 
-# In[21]:
+# In[49]:
 
 
 common_voice_train = (
@@ -211,13 +212,43 @@ eval_set = ong_test_df
 gow_df = gow_df
 
 # check size
+print(f"common_voice_train size: {len(common_voice_train)}")
+print(f"amm_opp_data_df size: {len(amm_opp_data_df)}")
+print(f"ong_test_df size: {len(ong_test_df)}")
+print(f"gow_df size: {len(gow_df)}")
+
+
+# In[50]:
+
+
+def get_file_size(p) -> float:
+    return p.stat().st_size / 1024 # kB
+
+def filter_low_size_data(df: pd.DataFrame, filesize_thres=10) -> pd.DataFrame:
+    df = df.assign(file_exist=lambda df: df.full_path.map(lambda s: s.exists()))
+    df = df[df.file_exist]
+    # print(df[~df.file_exist])
+    df = df.assign(filesize=lambda df: df.full_path.map(get_file_size))
+    df = df[(df.filesize > filesize_thres) & (df.sentence.str.len() > 3)]
+    return df
+
+
+# In[51]:
+
+
+common_voice_train = filter_low_size_data(common_voice_train, 10)
+amm_opp_data_df = filter_low_size_data(amm_opp_data_df, 30)
+ong_test_df = filter_low_size_data(ong_test_df, 10)
+gow_df = filter_low_size_data(gow_df, 10)
+
+# check size
 print(f"train size: {len(common_voice_train)}")
 print(f"train size: {len(amm_opp_data_df)}")
 print(f"train size: {len(ong_test_df)}")
 print(f"train size: {len(gow_df)}")
 
 
-# In[22]:
+# In[ ]:
 
 
 gow_df.head(2)
