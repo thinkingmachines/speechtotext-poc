@@ -236,7 +236,7 @@ def isd(preds: list[str], actuals: list[str], debug=False) -> tuple:
 def wer_th(pred: str, actual: str, **kwargs) -> float:
     preds = deepcut.tokenize(pred)
     actuals = deepcut.tokenize(actual)
-    err, steps = isd(preds, actuals, **kwargs)
+    err, step, _ = isd(preds, actuals, **kwargs)
     return err / len(actuals)
 
 
@@ -251,7 +251,7 @@ def wer_eng(pred: str, actual: str, **kwargs) -> float:
     actuals = actual.split(" ")
 
     # Calculte wer
-    err, steps = isd(preds, actuals, **kwargs)
+    err, steps, _ = isd(preds, actuals, **kwargs)
     return err / len(actuals)
 
 
