@@ -94,10 +94,10 @@ config = {
 # model config
 LEARNING_RATE = 0.25e-7
 WARMUP_STEPS = 800
-MAX_STEPS = 4000
-SAVE_STEPS = 800
-EVAL_STEPS = 40
-LOGGING_STEPS = 10
+MAX_STEPS = 4200
+SAVE_STEPS = 1400
+EVAL_STEPS = 50
+LOGGING_STEPS = 25
 OPTIMIZER = "adamw_bnb_8bit"
 
 ## Control input quality through video length and length words
@@ -136,6 +136,7 @@ AUDIO_BASE_PATH = COMMON_VOICE_PATH / "clips"
 
 OPP_DAY_PATH = DATA_PATH / "Opp Day SRTs"
 OPP_DAY_AUDIO_BASE_PATH = OPP_DAY_PATH / "chunks"
+EXCLUDE_SYMBOLS = {"NOBLE"}
 
 GOWAJEE_PATH = DATA_PATH / "gowajee"
 GOWAJEE_AUDIO_BASE_PATH = GOWAJEE_PATH / "audios"
@@ -224,7 +225,7 @@ gow_df = (
 )
 
 common_voice_train = pd.concat([common_voice_train, common_voice_eval, common_voice_test])[:TRAIN_MAX_N_FILES]
-amm_opp_data_df = amm_opp_data_df
+amm_opp_data_df = amm_opp_data_df[~amm_opp_data_df.symbol.isin(EXCLUDE_SYMBOLS)]
 eval_set = ong_test_df
 gow_df = gow_df
 
