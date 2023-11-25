@@ -26,6 +26,7 @@ import jiwer
 import numpy as np
 import pandas as pd
 import tensorflow as tf   
+from torchdata.datapipes.iter import IterableWrapper
 from IPython.display import Audio as audio_display
 from deepcut import tokenize  # Consume too much memory when using with CUDA
 # from pythainlp.tokenize import word_tokenize as tokenize
@@ -57,7 +58,7 @@ print_gpu_info()
 # !wget https://storage.googleapis.com/common-voice-prod-prod-datasets/cv-corpus-15.0-2023-09-08/cv-corpus-15.0-2023-09-08-th.tar.gz\?X-Goog-Algorithm\=GOOG4-RSA-SHA256\&X-Goog-Credential\=gke-prod%40moz-fx-common-voice-prod.iam.gserviceaccount.com%2F20231120%2Fauto%2Fstorage%2Fgoog4_request\&X-Goog-Date\=20231120T211937Z\&X-Goog-Expires\=43200\&X-Goog-SignedHeaders\=host\&X-Goog-Signature\=7b63c1ccdb27c7a2f2b1b5e59422ab38668543f242283238b92d39552aa12a2686ba413b29107e71c8fa75d850decf8d5f9e1f5c0f6b72da42154cf478ebe296f8445d1744267a3ad40391433517c9ad8735b26cfe5c53e777feffac2a71d54ee7ce47cb1c580449340a84d066271a57a2beba416de0d7e897ad7bd99f13e68e0d8a1a2cc1c2dbf2341740fd167e1d6572d84b23c9daee4139dd35cc8f827db052a05021ca1c25549baa18c823ed1c25347cd10972451718ac13c73b656bbc69134ebbcce7206ad38c6e3611ac59881e8a630abbdf7390b689bb74d7fe35cb80366742d76cf5a6eb462e6da408dd2bb05a97cd8b89a4110479d62f9dc6f84c4e
 # ```
 
-# In[3]:
+# In[24]:
 
 
 # Device config
@@ -69,7 +70,7 @@ TRAIN_SET_DIST = (0.15, 0.15, 0.7)
 SEED = 4242
 SAMPLING = 1  # sampling rate
 AUDIO_SAMPLING_RATE = 16_000
-MODEL_PATH_OR_URL = "20231125-model-backup/checkpoint-800"
+MODEL_PATH_OR_URL = "20231125-model-backup/checkpoint-1200"
 NUM_SHARDS = 100
 
 EVAL_MAX_N_FILES = None
@@ -102,9 +103,9 @@ OPTIMIZER = "adamw_bnb_8bit"
 
 ## Control input quality through video length and length words
 MAX_LABEL_LENGTH = 448
-MIN_LABEL_LEGNTH = 20
+MIN_LABEL_LENGTH = 10
 MAX_INPUT_LENGTH = 30
-MIN_INPUT_LENGTH = 5
+MIN_INPUT_LENGTH = 3
 
 GENERATION_MAX_LENGTH = 225
 CHUNK_LENGTH = 30
@@ -145,7 +146,7 @@ TEST_PATH = DATA_PATH / "stt-dataset" / "test"
 TEST_AUDIO_BASE_PATH = TEST_PATH / "[TH] Oppday Q2_2023 IP บมจ. อินเตอร์ ฟาร์มา"
 
 
-# In[4]:
+# In[25]:
 
 
 def remove_punct(s: str) -> str:
@@ -157,7 +158,7 @@ def remove_punct(s: str) -> str:
 remove_punct("ไหน?ลองซิ! ...")
 
 
-# In[36]:
+# In[26]:
 
 
 gow_train = (GOWAJEE_PATH / "train" / "text").read_text().split("\n")
@@ -168,7 +169,7 @@ gow_data = chain(gow_train, gow_dev, gow_test)
 gow_data = list(map(lambda s: ((ls := s.split(" "))[0] + ".wav", "".join(ls[1:])), gow_data))
 
 
-# In[49]:
+# In[27]:
 
 
 # Common Voice Dataset
@@ -236,7 +237,13 @@ print(f"ong_test_df size: {len(ong_test_df)}")
 print(f"gow_df size: {len(gow_df)}")
 
 
-# In[50]:
+# In[75]:
+
+
+amm_opp_data_df.symbol.unique()
+
+
+# In[28]:
 
 
 def get_file_size(p) -> float:
@@ -251,7 +258,7 @@ def filter_low_size_data(df: pd.DataFrame, filesize_thres=10) -> pd.DataFrame:
     return df
 
 
-# In[51]:
+# In[29]:
 
 
 common_voice_train = filter_low_size_data(common_voice_train, 10)
@@ -266,13 +273,13 @@ print(f"ong_test_df size: {len(ong_test_df)}")
 print(f"gow_df size: {len(gow_df)}")
 
 
-# In[ ]:
+# In[30]:
 
 
 gow_df.head(2)
 
 
-# In[16]:
+# In[31]:
 
 
 print_gpu_info()
@@ -280,7 +287,7 @@ print_gpu_info()
 
 # ## Preprocessor prep
 
-# In[23]:
+# In[32]:
 
 
 processor = WhisperProcessor.from_pretrained(
@@ -290,7 +297,7 @@ processor = WhisperProcessor.from_pretrained(
   )
 
 
-# In[24]:
+# In[33]:
 
 
 def prepare_dataset(batch: list[dict[str, Any]]):
@@ -314,7 +321,7 @@ def prepare_dataset(batch: list[dict[str, Any]]):
     return batch
 
 
-# In[25]:
+# In[59]:
 
 
 @dataclass
@@ -335,6 +342,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         # Removing this part to penalize when the prediction is too long or to less
         # # replace padding with -100 to ignore loss correctly
         # labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
+        labels = labels_batch["input_ids"]
 
         # # if bos token is appended in previous tokenization step,
         # # cut bos token here as it's append later anyways
@@ -352,13 +360,13 @@ def is_label_in_length_range(data):
     return MIN_LABEL_LENGTH < len(data["labels"]) < MAX_LABEL_LENGTH
 
 
-# In[26]:
+# In[60]:
 
 
 # https://huggingface.co/docs/datasets/audio_dataset#local-files
 
 
-# In[27]:
+# In[61]:
 
 
 def gen_dataset(df: pd.DataFrame) -> Dataset:
@@ -371,7 +379,7 @@ def gen_dataset(df: pd.DataFrame) -> Dataset:
     )
 
 
-# In[28]:
+# In[62]:
 
 
 _cmv_set = gen_dataset(common_voice_train)
@@ -382,20 +390,20 @@ _train_set = interleave_datasets([_cmv_set, _gow_set, _oppday_set], probabilitie
 _val_set = gen_dataset(eval_set)
 
 
-# In[39]:
+# In[63]:
 
 
 # tmp = iter(_train_set)
 # next(tmp)
 
 
-# In[35]:
+# In[64]:
 
 
 # next(iter(_val_set))
 
 
-# In[31]:
+# In[65]:
 
 
 def load_or_new_process(dataset, config, train_val = "train"):
@@ -403,29 +411,32 @@ def load_or_new_process(dataset, config, train_val = "train"):
     base_set = dataset.to_iterable_dataset(num_shards=NUM_SHARDS)
     
     if train_val == "train":
-        return (
+        train_set = (
             base_set
             .shuffle(seed=SEED)
             .map(prepare_dataset, batched=True, batch_size=DATA_PROCESS_BATCH_SIZE)
             .filter(is_audio_in_length_range)
             .filter(is_label_in_length_range)
         )
+        return IterableWrapper(train_set).prefetch(BATCH_SIZE * 2)
     elif train_val == "val":
-        return (
+        val_set = (
             base_set
             .map(prepare_dataset, batched=True, batch_size=DATA_PROCESS_BATCH_SIZE)
             .filter(is_audio_in_length_range)
             .filter(is_label_in_length_range)        
         )
+        return IterableWrapper(val_set).prefetch(BATCH_SIZE * 2)
     
     # Test set case
-    return (
+    test_set = (
         base_set
         .map(prepare_dataset, batched=True, batch_size=DATA_PROCESS_BATCH_SIZE)      
     )
+    return IterableWrapper(test_set).prefetch(BATCH_SIZE * 2)
 
 
-# In[32]:
+# In[66]:
 
 
 if not DATASET_CACHE_DIR.exists(): DATASET_CACHE_DIR.mkdir(exist_ok=True)
@@ -434,26 +445,26 @@ train_set = load_or_new_process(_train_set, config, "train")
 val_set = load_or_new_process(_val_set, config, "val")
 
 
-# In[33]:
+# In[67]:
 
 
 # next(iter(train_set))
 
 
-# In[28]:
+# In[68]:
 
 
 # For debugging
 # next(iter(train_set.map(lambda x: x, batched=True)))
 
 
-# In[29]:
+# In[69]:
 
 
 data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
 
 
-# In[30]:
+# In[46]:
 
 
 print_gpu_info()
@@ -461,7 +472,7 @@ print_gpu_info()
 
 # # Metrics
 
-# In[31]:
+# In[47]:
 
 
 CLEAN_PATTERNS = "((นะ)?(คะ|ครับ)|เอ่อ|อ่า)"
@@ -519,7 +530,7 @@ def wer(pred: str, actual: str, **kwargs) -> float:
     return err / len(actuals)
 
 
-# In[32]:
+# In[48]:
 
 
 def compute_metrics(pred):
@@ -540,14 +551,14 @@ def compute_metrics(pred):
     return {"wer": wer}
 
 
-# In[33]:
+# In[49]:
 
 
 print(hack_wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 print(wer("สวัสดีครับอิอิ ผมไม่เด็กแล้วนะครับ จริงๆนะ", "สวัสดีครับอุอุ ผมโตแล้วครับ จริงๆนะ", debug=True))
 
 
-# In[34]:
+# In[50]:
 
 
 print_gpu_info()
@@ -555,7 +566,7 @@ print_gpu_info()
 
 # # Model prep
 
-# In[35]:
+# In[51]:
 
 
 model = WhisperForConditionalGeneration.from_pretrained(
@@ -565,7 +576,7 @@ model = WhisperForConditionalGeneration.from_pretrained(
 )
 
 
-# In[36]:
+# In[52]:
 
 
 # model config setting
@@ -584,7 +595,7 @@ model.config.mask_time_min_masks = MASK_TIME_MIN_MASKS
 model.config.mask_time_prob = MASK_TIME_PROB
 
 
-# In[37]:
+# In[53]:
 
 
 print_gpu_info()
@@ -592,13 +603,13 @@ print_gpu_info()
 
 # # Fine-tune the model
 
-# In[38]:
+# In[54]:
 
 
 (output_dir := MODEL_CHECKPOINT_DIR).mkdir(exist_ok=True)
 
 
-# In[39]:
+# In[70]:
 
 
 training_args = Seq2SeqTrainingArguments(
@@ -629,7 +640,7 @@ training_args = Seq2SeqTrainingArguments(
 )
 
 
-# In[40]:
+# In[71]:
 
 
 trainer = Seq2SeqTrainer(
@@ -643,13 +654,13 @@ trainer = Seq2SeqTrainer(
 )
 
 
-# In[41]:
+# In[72]:
 
 
 print_gpu_info()
 
 
-# In[42]:
+# In[73]:
 
 
 result = trainer.train()
