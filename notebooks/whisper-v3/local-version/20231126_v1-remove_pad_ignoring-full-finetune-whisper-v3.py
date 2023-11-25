@@ -93,10 +93,10 @@ config = {
 
 # model config
 LEARNING_RATE = 0.25e-7
-WARMUP_STEPS = 500
-MAX_STEPS = 3000
-SAVE_STEPS = 600
-EVAL_STEPS = 20
+WARMUP_STEPS = 800
+MAX_STEPS = 4000
+SAVE_STEPS = 800
+EVAL_STEPS = 40
 LOGGING_STEPS = 10
 OPTIMIZER = "adamw_bnb_8bit"
 
@@ -111,7 +111,7 @@ CHUNK_LENGTH = 30
 NUM_BEAMS = 1
 BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 16
-N = 4
+N = 8
 
 # model regularization config
 DROPOUT = 0.05
@@ -216,6 +216,7 @@ ong_test_df = (
     .assign(sentence=lambda df: df["Actual-transcript"].map(remove_punct))    
 )
 
+# Gowajee dataset
 gow_df = (
     pd.DataFrame(gow_data, columns=["filename", "sentence"])
     .assign(full_path=lambda df: GOWAJEE_AUDIO_BASE_PATH / df.filename)
