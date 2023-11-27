@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[138]:
+# In[1]:
 
 
 # # Download ong's data
@@ -11,7 +11,7 @@
 # !gdown --id 1TRPRcDEyi6ogu8j4OE_d_ePJRxUw_X1m
 
 
-# In[139]:
+# In[1]:
 
 
 from pathlib import Path
@@ -23,22 +23,23 @@ import pandas as pd
 from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip, ffmpeg_extract_audio
 
 
-# In[140]:
+# In[2]:
 
 
 ROOT_PATH = Path.cwd().parent / "data" / "Opp Day SRTs" 
 (VIDEO_CHUNKS_PATH := ROOT_PATH / "chunks").mkdir(exist_ok=True)
 
 
-# In[141]:
+# In[3]:
 
 
 fr_srts = list((ROOT_PATH / "Freelancer SRT").rglob("*.srt"))
 capcut_srts = list((ROOT_PATH / "Capcut SRT").rglob("*.srt"))
-vids = list((ROOT_PATH).rglob("*.mp4"))
+vids = list((ROOT_PATH / "Original Videos").rglob("*.mp4"))
+# vids = list((ROOT_PATH).rglob("*.mp4"))
 
 
-# In[142]:
+# In[4]:
 
 
 def gen_srt_map(ls: list[Path], exist_dict: dict = {}) -> dict[str, Path]:
@@ -93,47 +94,79 @@ def cut_video_into_chunks(symbol: str, srt_maps: dict, vid_maps: dict) -> list[s
         
 
 
-# In[143]:
+# In[5]:
 
 
 srt_maps = gen_srt_map(capcut_srts)
 srt_maps = gen_srt_map(fr_srts, srt_maps)
 
 
-# In[144]:
+# In[6]:
 
 
 vid_maps = gen_video_map(vids)
 
 
-# In[145]:
+# In[7]:
 
 
-print(srt_maps.keys())
-print(vid_maps.keys())
+print(sorted(srt_maps.keys()))
+print(sorted(vid_maps.keys()))
 
 
-# In[146]:
+# In[8]:
+
+
+existing_df = pd.read_csv(ROOT_PATH / "train_metadata.tsv", sep="\t")
+
+
+# In[9]:
+
+
+existed_symbols = set(existing_df.symbol.unique().tolist())
+
+
+# In[10]:
 
 
 target_symbols = set(vid_maps.keys()).intersection(srt_maps.keys())
 print(target_symbols)
+print(f"remaining symbols: {target_symbols - existed_symbols}")
 
 
-# In[147]:
+# In[86]:
 
 
-results = list(chain.from_iterable([cut_video_into_chunks(symbol, srt_maps, vid_maps) for symbol in target_symbols]))
+# remaining_symbols = {"ADB", "SPRC", "SPVI"}
+remaining_symbols = target_symbols - existed_symbols
 
 
-# In[148]:
+# In[87]:
+
+
+existing_df = existing_df[~existing_df.symbol.isin(remaining_symbols)]
+
+
+# In[89]:
+
+
+results = list(chain.from_iterable([cut_video_into_chunks(symbol, srt_maps, vid_maps) for symbol in remaining_symbols]))
+
+
+# In[90]:
 
 
 df = pd.DataFrame(results, columns=["symbol", "path", "transcript"])
 
 
-# In[149]:
+# In[91]:
 
 
-df.to_csv(ROOT_PATH / "train_metadata.tsv", sep="\t", index=False)
+pd.concat([df, existing_df]).to_csv(ROOT_PATH / "train_metadata.tsv", sep="\t", index=False)
+
+
+# In[ ]:
+
+
+
 
