@@ -67,7 +67,7 @@ torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
 # Data config
 TRAIN_SET_DIST = (0.10, 0.10, 0.80)
-SEED = 4242
+SEED = 1942
 SAMPLING = 1  # sampling rate
 AUDIO_SAMPLING_RATE = 16_000
 MODEL_PATH_OR_URL = "20231125-model-backup/checkpoint-1200"
@@ -119,9 +119,9 @@ N = 4
 DROPOUT = 0.05
 APPLY_SPEC_AUGMENT = True
 MASK_FEATURE_LENGTH = 10
-MASK_FEATURE_PROB = 0.10
+MASK_FEATURE_PROB = 0.15
 MASK_FEATURE_MIN_MASKS = 1
-MASK_TIME_PROB = 0.10
+MASK_TIME_PROB = 0.15
 MASK_TIME_MIN_MASKS = 2
 MASK_TIME_LENGTH = 10
 
@@ -593,7 +593,7 @@ model = WhisperForConditionalGeneration.from_pretrained(
 
 # model config setting
 model.config.forced_decoder_ids = None
-model.generate = partial(model.generate, language="Thai", task="transcribe")
+model.generate = partial(model.generate, language="thai", task="transcribe")
 model.config.suppress_tokens = []
 model.enable_input_require_grads()
 
