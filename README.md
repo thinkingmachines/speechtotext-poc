@@ -86,4 +86,4 @@ MIT License
 Copyright (c) 2024 Ratchada-Whisper
 
 ## Contact
-For support or queries, contact tm-zoon.
+For support or queries, open new issue or contact contributors on the team for the assistance.
