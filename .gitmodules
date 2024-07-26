@@ -1,0 +1,3 @@
+[submodule "ratchada-utils"]
+	path = ratchada-utils
+	url = https://github.com/thinkingmachines/ratchada-utils.git
