@@ -1,6 +1,0 @@
-data/
-*cache/
-*model/
-*checkpoints/
-*vad-caches/
-test-results.xlsx

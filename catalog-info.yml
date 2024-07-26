@@ -14,13 +14,13 @@ metadata:
     - url: https://thinkdatasci.slack.com/archives/C021699RE7K
       title: Slack - Foundations Engineering Channel
       icon: chat # see https://backstage.io/docs/reference/core-app-api.appicons for all icons
-#     - url: 
+#     - url:
 #       title: Asana / JIRA / Scrum Board / Us
 #       icon: dashboard
-#     - url: 
+#     - url:
 #       title: Wiki
 #       icon: docs
-#     - url: 
+#     - url:
 #       title: Onboarding Document
 #       icon: docs
 #     - url:
@@ -65,23 +65,23 @@ spec:
         url: .
         values:
           owner: thinkingmachines
-  
+
     - id: publish
       name: Publish
       action: publish:github
       input:
         allowedHosts: ['github.com']
-        description: 
-        repoUrl: 
-        gitAuthorName: 
-        gitAuthorEmail: 
+        description:
+        repoUrl:
+        gitAuthorName:
+        gitAuthorEmail:
         collaborators:
-        - user: 
+        - user:
           access: admin
-  
+
     - id: register
       name: Register
       action: catalog:register
       input:
-        repoContentsUrl: 
+        repoContentsUrl:
         catalogInfoPath: '/catalog-info.yml'

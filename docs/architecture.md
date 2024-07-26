@@ -2,7 +2,7 @@
 
 ``` @TODO: Summary of Architecture and steps to access each component ```
 
-The `github-starter` project is meant as a base repository template; it should be a basis for other projects. 
+The `github-starter` project is meant as a base repository template; it should be a basis for other projects.
 
 `github-starter` is hosted on Github, and is available as a [Template in Backstage]([url](https://catalog.tm8.dev/create?filters%5Bkind%5D=template&filters%5Buser%5D=all)****)
 
@@ -76,7 +76,7 @@ The `github-starter` project is meant as a base repository template; it should b
 
 **Get access to Client AWS Platform**
 - Person in charge: Client Name/Dev Name
-- Bitwarden Credentials: 
+- Bitwarden Credentials:
 1. Install AWS CLI
 2. Run `aws configure` - ID and Secret from Bitwarden
 
@@ -86,7 +86,7 @@ The `github-starter` project is meant as a base repository template; it should b
 Host project-vpn
    Hostname xx.xxx.xxx.xxx
    User ubuntu
-   
+
 # Use the Private IP for the rest
 Host dev-project-app
    Hostname xxx.xx.xx.xx
@@ -98,4 +98,4 @@ Host dev-project-app
 **Access Prod App in UI**
 1. Install `sshuttle`
 2. Run `sshuttle -r dev-project-app xxx.xx.0.0/16`
-3. Open web browser using the Private IP found in you SSH config (http:xxx.xx.xx.xx:3000) 
+3. Open web browser using the Private IP found in you SSH config (http:xxx.xx.xx.xx:3000)
