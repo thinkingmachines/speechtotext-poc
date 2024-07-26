@@ -1,101 +1,113 @@
 # Project Architecture and Access to Production
-
-``` @TODO: Summary of Architecture and steps to access each component ```
-
-The `github-starter` project is meant as a base repository template; it should be a basis for other projects.
-
-`github-starter` is hosted on Github, and is available as a [Template in Backstage]([url](https://catalog.tm8.dev/create?filters%5Bkind%5D=template&filters%5Buser%5D=all)****)
+The `set-speechtotext-poc` project is a proof of concept for speech-to-text conversion using machine learning models.
 
 ## Architecture Details
-```Note: Structure of this document assumes Dev and Prod are in different Cloud Platform projects. You can reduce the sections for architecture if redundant. Just note the datasets, vms, buckets, etc. being used in Dev vs Prod ```
-- Provider: ``` @TODO: GCP / AWS / Azure / etc ```
-- Dev Environment: ``` @TODO: Link to dev env ```
-- Prod Environment: ``` @TODO: Link to prod env ```
-- Technology: ``` @TODO: Python / Airflow / Dagster / Postgres / Snowflake / etc ```
 
-### Implementation Notes
-``` @TODO: Note down known limitations, possible issues, or known quirks with the project. The following questions might help: ``` <br>
-``` 1. Which component needs most attention? ie. Usually the first thing that needs tweaks ``` <br>
-``` 2. Are the parts of the project that might break in the future? (eg. Filling up of disk space, memory issues if input data size increases, a web scraper, etc.)``` <br>
-``` 3. What are some known limitations for the project? (eg. Input data schema has to remain the same, etc.)```
+- Provider: GCP (Google Cloud Platform)
+- Technology: Python, TensorFlow/PyTorch, Jupyter Notebooks
+
+## Implementation Notes
+
+1. The data preprocessing pipeline may need the most attention, as it's crucial for model performance.
+2. The project may face scalability issues if the input data size increases significantly.
+3. Known limitations include potential model accuracy variations based on audio quality and accents.
 
 ## Dev Architecture
-``` @TODO: Dev architecture diagram and description. Please include any OAuth or similar Applications.```
-``` @TODO: List out main components being used and their descriptions.```
+![tools](../data/imgs/tools.jpg)
 
-### Virtual Machines
-``` @TODO: List VMs used and what they host```
-### Datasets
-``` @TODO: List datasets given following format```
-#### Dataset A
-- Description: PSGC Data
-- File Location: GCS Uri / GDrive link / etc
-- Retention Policy: 3 months
+### Main components:
 
-### Tokens and Accounts
-``` @TODO: Please fill out all Tokens and Accounts being used in the project given the format below. Include tokens from client used in the project.```
+1. Data Preprocessing Pipeline
+2. Model Training Module
+3. Evaluation Notebooks
 
-**Dev Github Service Account Token**
+## Virtual Machines
 
-- Location: Bitwarden Github Collection
-- Person in charge: Client Name (client@email.com)
-- Validity: 30 Days
-- Description: This token is used to call the Github API using the account ``sample-account@thinkingmachin.es`
-- How to Refresh:
-  1. Go to github.com
-  2. Click refresh
+- VM-1: Hosts Jupyter Notebooks for development and experimentation
+- VM-2: Used for data preprocessing and model training
+
+## Datasets
+### Speech Dataset
+
+- Description: Raw audio files for speech-to-text conversion
+- File Location: GCS Uri: gs://set-speechtotext-poc-dev/raw-audio
+- Retention Policy: 6 months
+
+## Tokens and Accounts
+### Dev GCP Service Account
+
+- Location: Bitwarden GCP Collection
+- Person in charge: [tm-zoon](mailto:zoon_p@thinkingmachin.es)
+- Validity: 1 year
+- Description: This service account is used to access GCP resources for development
+### How to Refresh:
+
+1. Go to GCP Console
+2. Navigate to IAM & Admin > Service Accounts
+3. Rotate keys for the dev service account
+
+
 
 ## Production Architecture
-``` @TODO: Prod architecture diagram and description. Please include any OAuth or similar Applications.```
-``` @TODO: List out main components being used and their descriptions.```
 
-### Virtual Machines
-``` @TODO: List VMs used and what they host```
-### Datasets
-``` @TODO: List datasets given following format```
-#### Dataset A
-- Description: PSGC Data
-- File Location: GCS Uri / GDrive link / etc
-- Retention Policy: 3 months
+1. Optimized Data Preprocessing Pipeline
+2. Deployed Speech-to-Text Model
+3. API for Speech Recognition Requests
 
-### Tokens and Accounts
-``` @TODO: Please fill out all Tokens and Accounts being used in the project given the format below. Include tokens from client used in the project.```
+## Virtual Machines
 
-**Prod Github Service Account Token**
+- VM-Prod-1: Hosts the production speech-to-text model
+- VM-Prod-2: Handles API requests and preprocessing
 
-- Location: Bitwarden Github Collection
-- Person in charge: Client Name (client@email.com)
-- Validity: 30 Days
-- Description: This token is used to call the Github API using the account ``sample-account@thinkingmachin.es`
-- How to Refresh:
-  1. Go to github.com
-  2. Click refresh
+## Datasets
+### Processed Speech Dataset
+
+1. Description: Preprocessed audio data ready for model inference
+2. File Location: GCS Uri: [here](gs://set-speechtotext-poc-prod/processed-audio)
+3. Retention Policy: 1 year
+
+## Tokens and Accounts
+### Prod GCP Service Account
+
+- Location: Bitwarden GCP Collection
+- Person in charge: [Operations Manager](ops@email.com)
+- Validity: 6 months
+- Description: This service account is used to access GCP resources in production
+### How to Refresh:
+
+1. Go to GCP Console
+2. Navigate to IAM & Admin > Service Accounts
+3. Rotate keys for the prod service account
 
 ## Accessing Cloud Platform Environments
-```@TODO: Describe the steps to access the prod VMs/platform```
+### Get access to GCP Platform
 
-**Get access to Client AWS Platform**
-- Person in charge: Client Name/Dev Name
-- Bitwarden Credentials:
-1. Install AWS CLI
-2. Run `aws configure` - ID and Secret from Bitwarden
+- Person in charge: [DevOps Lead]
+- Bitwarden Credentials: [Link to Bitwarden entry]
 
-**Accessing Prod VM**
+
+1. Install Google Cloud SDK
+2. Run gcloud auth login and follow prompts
+
+## Accessing Prod VM
+
 1. Update your ssh config to have the following:
-```
-Host project-vpn
-   Hostname xx.xxx.xxx.xxx
-   User ubuntu
 
-# Use the Private IP for the rest
-Host dev-project-app
-   Hostname xxx.xx.xx.xx
-   User ubuntu
-   ProxyJump project-vpn
-```
-2. Run `ssh dev-project-app`
+```bash
+Host set-speechtotext-vpn
+   Hostname [VPN_IP_ADDRESS]
+   User [VPN_USERNAME]
 
-**Access Prod App in UI**
+Host prod-speechtotext-app
+   Hostname [PRIVATE_IP]
+   User [VM_USERNAME]
+   ProxyJump set-speechtotext-vpn
+```
+
+2. Run `ssh prod-speechtotext-app`
+
+### Access Prod App in UI
+
 1. Install `sshuttle`
-2. Run `sshuttle -r dev-project-app xxx.xx.0.0/16`
-3. Open web browser using the Private IP found in you SSH config (http:xxx.xx.xx.xx:3000)
+2. Run `sshuttle -r prod-speechtotext-app [VPC_CIDR_RANGE]`
+3. Open web browser using the Private IP found in your SSH config (`http:[PRIVATE_IP]:8080`)
