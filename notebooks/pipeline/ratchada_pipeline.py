@@ -1,8 +1,7 @@
 import librosa
 import numpy as np
 import soundfile as sf
-import torch
-from processor import tokenize_text
+from ratchada_utils.processor import tokenize_text
 from transformers import Pipeline
 
 TARGET_SAMPLING_RATE = 16_000
